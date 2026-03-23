@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <link rel="icon" href="Imagenes/GaiaFinder_logo.ico" type="image/x-icon">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Visualización del Espectro</title>
+    <!-- Incluyendo Bootstrap -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <!-- Incluyendo Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Incluyendo jQuery -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <!-- Incluyendo Aladin Lite -->
+    <link rel="stylesheet" href="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.css">
+    <script type="text/javascript" src="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js"></script>
+    {{ resources|safe }}
+
+    <style>
+        body {
+            background-color: #001122;
+            color: #FFFFFF;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .container {
+            flex: 1;
+        }
+
+        /* Estilo del footer */
+        footer {
+            background-color: #002233;
+            color: #FFFFFF;
+            text-align: center;
+            padding: 10px 0;
+            position: relative;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+
+</head>
+
+<body>
+
+<div class="container mt-5">
+    <h1>Visualización del Espectro + Mapa Celeste Aladin</h1>
+
+    <!-- Botones de descarga -->
+    <div class="mt-4 row">
+        <div class="col-auto mb-3">
+            <a href="{{ url_for('download_csv', doc_id=current_doc['GaiaSpec_Source_id']) }}" class="btn btn-secondary">Descargar CSV</a>
+        </div>
+        <div class="col-auto mb-3">
+            <a href="{{ url_for('download_excel', doc_id=current_doc['GaiaSpec_Source_id']) }}" class="btn btn-secondary">Descargar Excel</a>
+        </div>
+        <div class="col-auto mb-3">
+            <a href="{{ url_for('download_json', doc_id=current_doc['GaiaSpec_Source_id']) }}" class="btn btn-secondary">Descargar JSON</a>
+        </div>
+        <div>
+            <p>Source Id: {{ current_doc['GaiaSpec_Source_id'] }}</p>
+        </div>
+    </div>
+
+    <!-- Pestañas -->
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="espectro-tab" data-toggle="tab" href="#espectro" role="tab" aria-controls="espectro" aria-selected="true">Análisis de Espectro</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="mapa-tab" data-toggle="tab" href="#mapa" role="tab" aria-controls="mapa" aria-selected="false">Mapa de Aladin</a>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="myTabContent">
+        <!-- Contenido del Espectro -->
+        <div class="tab-pane fade show active" id="espectro" role="tabpanel" aria-labelledby="espectro-tab">
+            <div style="width: 100%; height: 80vh;">
+                {{ script|safe }}
+                {{ div|safe }}
+            </div>
+        </div>
+
+        <!-- Contenido del Mapa de Aladin -->
+        <div class="tab-pane fade" id="mapa" role="tabpanel" aria-labelledby="mapa-tab">
+            <div id="aladin-lite-div" style="width: 100%; height: 600px; border: 1px solid black;"></div>
+        </div>
+    </div>
+
+</div>
+
+<script type="text/javascript">
+    document.addEventListener("DOMContentLoaded", function() {
+        // Verifica las coordenadas en la consola
+        const ra = {{ current_doc['GaiaSpec_ra'] }};
+        const dec = {{ current_doc['GaiaSpec_dec'] }};
+        console.log("RA:", ra);
+        console.log("DEC:", dec);
+
+        // Inicializar Aladin Lite con las coordenadas cuando se activa la pestaña del mapa
+        $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+            if (e.target.id === 'mapa-tab') {
+                const aladin = A.aladin('#aladin-lite-div', {
+                    survey: 'P/DSS2/color',
+                    fov: 0.5
+                });
+                // Asegurarse de que el mapa está centrado en las coordenadas
+                aladin.gotoRaDec(ra, dec);
+            }
+        });
+    });
+</script>
+
+
+<!-- Footer -->
+<footer>
+    <p>&copy; 2024 Observatorio ESTELIA + <a href="https://seidelingenieria.com/" style="color: #FFFFFF;">Seidel Ingenieria Informática S.L. - Desarrollo de software a medida.</a></p>
+    <p><a href="mailto:info@observatorio-estelia.es" style="color: #FFFFFF;">Contacto: info@observatorio-estelia.es</a></p>
+</footer>
+
+<!-- Incluyendo Bootstrap JS -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+</body>
+</html>

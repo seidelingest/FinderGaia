@@ -1,0 +1,92 @@
+ERROR:root:Validation error: Ambiguous target name; provide unique id:
+    Record #  Epoch-yr  >MATCH DESIG<  Primary Desig  Name  
+    --------  --------  -------------  -------------  -------------------------
+    90001061    2011    141P           141P            Machholz 2
+    90001062    2019    141P           141P            Machholz 2
+    90001063    1994    141P-A         141P-A          Machholz 2
+    90001064    1997    141P-A         141P-A          Machholz 2
+    90001065    1999    141P-A         141P-A          Machholz 2
+    90001066    1994    141P-D         141P-D          Machholz 2
+    90001067    1999    141P-D         141P-D          Machholz 2
+    90001068    2020    141P-I         141P-I          Machholz 2
+
+ERROR:root:Validation error: Ambiguous target name; provide unique id:
+    Record #  Epoch-yr  >MATCH DESIG<  Primary Desig  Name  
+    --------  --------  -------------  -------------  -------------------------
+    90001063    1994    141P-A         141P-A          Machholz 2
+    90001064    1997    141P-A         141P-A          Machholz 2
+    90001065    1999    141P-A         141P-A          Machholz 2
+
+ERROR:root:Validation error: Ambiguous target name; provide unique id:
+    Record #  Epoch-yr  >MATCH DESIG<  Primary Desig  Name  
+    --------  --------  -------------  -------------  -------------------------
+    90001061    2011    141P           141P            Machholz 2
+    90001062    2019    141P           141P            Machholz 2
+    90001063    1994    141P-A         141P-A          Machholz 2
+    90001064    1997    141P-A         141P-A          Machholz 2
+    90001065    1999    141P-A         141P-A          Machholz 2
+    90001066    1994    141P-D         141P-D          Machholz 2
+    90001067    1999    141P-D         141P-D          Machholz 2
+    90001068    2020    141P-I         141P-I          Machholz 2
+
+ERROR:root:Validation error: Ambiguous target name; provide unique id:
+    Record #  Epoch-yr  >MATCH DESIG<  Primary Desig  Name  
+    --------  --------  -------------  -------------  -------------------------
+    90001061    2011    141P           141P            Machholz 2
+    90001062    2019    141P           141P            Machholz 2
+    90001063    1994    141P-A         141P-A          Machholz 2
+    90001064    1997    141P-A         141P-A          Machholz 2
+    90001065    1999    141P-A         141P-A          Machholz 2
+    90001066    1994    141P-D         141P-D          Machholz 2
+    90001067    1999    141P-D         141P-D          Machholz 2
+    90001068    2020    141P-I         141P-I          Machholz 2
+
+ERROR:root:Validation error: Ambiguous target name; provide unique id:
+    Record #  Epoch-yr  >MATCH DESIG<  Primary Desig  Name  
+    --------  --------  -------------  -------------  -------------------------
+    90001061    2011    141P           141P            Machholz 2
+    90001062    2019    141P           141P            Machholz 2
+    90001063    1994    141P-A         141P-A          Machholz 2
+    90001064    1997    141P-A         141P-A          Machholz 2
+    90001065    1999    141P-A         141P-A          Machholz 2
+    90001066    1994    141P-D         141P-D          Machholz 2
+    90001067    1999    141P-D         141P-D          Machholz 2
+    90001068    2020    141P-I         141P-I          Machholz 2
+
+ERROR:root:Validation error: Ambiguous target name; provide unique id:
+    Record #  Epoch-yr  >MATCH DESIG<  Primary Desig  Name  
+    --------  --------  -------------  -------------  -------------------------
+    90000917    1984    94P            94P             Russell 4
+    90000918    1990    94P            94P             Russell 4
+    90000919    1997    94P            94P             Russell 4
+    90000920    2014    94P            94P             Russell 4
+
+ERROR:root:Validation error: Unknown target (94P/Russell). Maybe try different id_type?
+ERROR:root:Validation error: Ambiguous target name; provide unique id:
+    Record #  Epoch-yr  >MATCH DESIG<  Primary Desig  Name  
+    --------  --------  -------------  -------------  -------------------------
+    90001000    1990    116P           116P            Wild 4
+    90001001    1996    116P           116P            Wild 4
+    90001002    1996    116P           116P            Wild 4
+    90001003    2000    116P           116P            Wild 4
+    90001004    2003    116P           116P            Wild 4
+    90001005    2007    116P           116P            Wild 4
+    90001006    2016    116P           116P            Wild 4
+
+ERROR:root:Validation error: Unknown target (116P Wild). Maybe try different id_type?
+ERROR:root:Validation error: not enough values to unpack (expected 3, got 2)
+ERROR:root:Validation error: Ambiguous target name; provide unique id:
+    Record #  Epoch-yr  >MATCH DESIG<  Primary Desig  Name  
+    --------  --------  -------------  -------------  -------------------------
+    90001061    2011    141P           141P            Machholz 2
+    90001062    2019    141P           141P            Machholz 2
+    90001063    1994    141P-A         141P-A          Machholz 2
+    90001064    1997    141P-A         141P-A          Machholz 2
+    90001065    1999    141P-A         141P-A          Machholz 2
+    90001066    1994    141P-D         141P-D          Machholz 2
+    90001067    1999    141P-D         141P-D          Machholz 2
+    90001068    2020    141P-I         141P-I          Machholz 2
+
+ERROR:root:Unexpected error: name 'timedelta' is not defined
+ERROR:root:Unexpected error: name 'timedelta' is not defined
+ERROR:root:Unexpected error: name 'timedelta' is not defined

@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-2LBH764EV6"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-2LBH764EV6');
+    </script>A
+
+    <meta charset="utf-8">
+    <link rel="icon" href="{{ url_for('static', filename='Imagenes/GaiaFinder_logo.ico') }}" type="image/x-icon">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script type="text/javascript" src="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js"></script>
+    <link rel="stylesheet" href="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.css" />
+    <title>Buscador en el catálogo Gaia DR3</title>
+    <meta name="description" content="Buscador del catálogo Gaia DR3 con visualización de los espectros.">
+
+    <style>
+        body {
+            background-color: #001122;
+            color: #FFFFFF;
+        }
+        .logo-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 30px;
+            width: 400px;
+        }
+        .logo-container img {
+            width: 300px;
+            margin: 0 20px;
+        }
+        .form-container, .table-container {
+            margin-top: 30px;
+            max-width: 1800px;
+            margin: auto;
+        }
+        .form-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .form-group {
+            margin-right: 20px;
+            flex: 1;
+        }
+        .input-group {
+            display: flex;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .small-input {
+            max-width: 80px;
+            margin-right: 5px;
+        }
+        .wide-input {
+            max-width: 405px; /* Increase the width as needed */
+        }
+        .form-control {
+            background-color: #003322;
+            color: #FFFFFF;
+            border: 1px solid #555555;
+        }
+        .btn-container {
+            display: flex;
+            align-items: center;
+        }
+        .btn-success, .btn-secondary {
+            color: #FFFFFF;
+            margin-right: 10px;
+        }
+        .limited-width {
+            max-width: 200px;
+        }
+        .table-container {
+            max-width: 1800px;
+            margin: auto;
+        }
+        .table th, .table td {
+            white-space: nowrap;
+        }
+        .table th.sortable {
+            cursor: pointer;
+        }
+        .table th.sortable:hover {
+            text-decoration: underline;
+        }
+        .table th.sorted-asc::after {
+            content: " \25B2";
+        }
+        .table th.sorted-desc::after {
+            content: " \25BC";
+        }
+        .table tbody tr:hover {
+            background-color: #000000;
+        }
+        .table a {
+            cursor: pointer;
+        }
+        .table th, .table td, h1, p, label, li {
+            color: #FFFFFF;
+        }
+        ul, ol, li, p {
+            margin: 0;
+            padding: 0;
+        }
+        .notes-list {
+            list-style-type: circle;
+            margin-left: 20px;
+        }
+        .table tbody tr:nth-child(odd) {
+            background-color: #003344;
+        }
+        .table tbody tr:nth-child(even) {
+            background-color: #004455;
+        }
+        @media (max-width: 768px) {
+            .form-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .form-group {
+                width: 100%;
+                margin-right: 0;
+            }
+            .btn-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .btn-success, .btn-secondary {
+                width: 100%;
+                margin-right: 0;
+                margin-bottom: 10px;
+            }
+        }
+        .table th {
+            white-space: normal;
+            word-wrap: break-word;
+            max-width: 100px;
+            position: sticky;
+            top: 0;
+            background-color: #001122;
+            z-index: 1;
+        }
+        footer {
+            background-color: #002233;
+            color: #FFFFFF;
+            text-align: center;
+            padding: 10px 0;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+        #cookieConsent {
+            background-color: #222;
+            color: white;
+            text-align: center;
+            padding: 15px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            z-index: 1000;
+        }
+        #cookieConsent a {
+            color: #4CAF50;
+            text-decoration: none;
+        }
+        #cookieConsent button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+        fieldset {
+            border: 2px solid #555555;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        legend {
+            font-size: 1.2em;
+            padding: 0 10px;
+            background-color: #001122;
+            border: 1px solid #555555;
+            border-radius: 5px;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+        }
+        .filter-group .form-control {
+            margin-right: 5px;
+        }
+    </style>
+
+    <script>
+        function setSearchState() {
+            var searchButton = document.getElementById("searchButton");
+            searchButton.value = "Buscando...";
+            searchButton.style.backgroundColor = "orange";
+            searchButton.disabled = true;
+            return true;
+        }
+
+        function sortTable(table, col, reverse) {
+            var tb = table.tBodies[0],
+                tr = Array.prototype.slice.call(tb.rows, 0),
+                i;
+            reverse = -((+reverse) || -1);
+            tr = tr.sort(function (a, b) {
+                var aValue = parseFloat(a.cells[col].textContent.trim());
+                var bValue = parseFloat(b.cells[col].textContent.trim());
+
+                if (isNaN(aValue)) aValue = -Infinity;
+                if (isNaN(bValue)) bValue = -Infinity;
+
+                return reverse * ((aValue > bValue) - (bValue > aValue));
+            });
+            for (i = 0; i < tr.length; ++i) tb.appendChild(tr[i]);
+
+            Array.prototype.forEach.call(table.querySelectorAll('th'), function(th) {
+                th.classList.remove('sorted-asc', 'sorted-desc');
+            });
+
+            table.querySelector('th:nth-child(' + (col + 1) + ')').classList.add(reverse === 1 ? 'sorted-asc' : 'sorted-desc');
+        }
+
+        function makeSortable(table) {
+            var th = table.tHead, i;
+            th && (th = th.rows[0]) && (th = th.cells);
+            if (th) i = th.length;
+            else return;
+            while (--i >= 0) (function (i) {
+                var dir = 1;
+                th[i].addEventListener('click', function () {
+                    sortTable(table, i, (dir = 1 - dir));
+                });
+            }(i));
+        }
+
+        function makeAllSortable(parent) {
+            parent = parent || document.body;
+            var t = parent.getElementsByTagName('table'), i = t.length;
+            while (--i >= 0) makeSortable(t[i]);
+        }
+
+        function checkFormCompletion() {
+            var sourceId = document.getElementsByName('source_id')[0].value;
+            var raHours = document.getElementsByName('ra_hours')[0].value;
+            var raMinutes = document.getElementsByName('ra_minutes')[0].value;
+            var raSeconds = document.getElementsByName('ra_seconds')[0].value;
+            var decDegrees = document.getElementsByName('dec_degrees')[0].value;
+            var decMinutes = document.getElementsByName('dec_minutes')[0].value;
+            var decSeconds = document.getElementsByName('dec_seconds')[0].value;
+            var searchDegrees = document.getElementsByName('search_degrees')[0].value;
+
+            var searchButton = document.getElementById('searchButton');
+
+            if ((raHours.trim() !== "" && raMinutes.trim() !== "" && raSeconds.trim() !== "" && decDegrees.trim() !== "" && decMinutes.trim() !== "" && decSeconds.trim() !== "" && searchDegrees.trim() !== "")) {
+                searchButton.disabled = false;
+            } else {
+                searchButton.disabled = true;
+            }
+        }
+
+        function consentBanner() {
+            if (!localStorage.getItem('cookieConsent')) {
+                var consentBanner = document.createElement('div');
+                consentBanner.id = 'cookieConsent';
+                consentBanner.innerHTML = 'Esta web usa cookies. Sino estás de acuerdo debes cerrarla. <button onclick="acceptCookies()">Aceptar</button>';
+                document.body.appendChild(consentBanner);
+            }
+        }
+
+        function acceptCookies() {
+            localStorage.setItem('cookieConsent', 'true');
+            document.getElementById('cookieConsent').remove();
+        }
+
+        function getCoordinatesBySourceID() {
+            const sourceId = document.getElementsByName('source_id')[0].value;
+            if (sourceId) {
+                fetch('/get_coordinates', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `source_id=${sourceId}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        document.getElementsByName('source_id')[0].value = sourceId; // Ensure Source ID stays the same
+                        document.getElementsByName('ra_hours')[0].value = data.ra_hours;
+                        document.getElementsByName('ra_minutes')[0].value = data.ra_minutes;
+                        document.getElementsByName('ra_seconds')[0].value = data.ra_seconds;
+                        document.getElementsByName('dec_degrees')[0].value = data.dec_degrees;
+                        document.getElementsByName('dec_minutes')[0].value = data.dec_minutes;
+                        document.getElementsByName('dec_seconds')[0].value = data.dec_seconds;
+                        checkFormCompletion(); // Check form completion after setting the values
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            }
+        }
+
+        function getCoordinatesByHorizonsID() {
+            const horizonsButton = document.querySelector('button[onclick="getCoordinatesByHorizonsID()"]');
+            const originalText = horizonsButton.innerText;
+            const originalColor = horizonsButton.style.backgroundColor; // Capture the original color
+            horizonsButton.innerText = "Consultando a NASA";
+            horizonsButton.style.backgroundColor = "orange"; // Change to orange
+            horizonsButton.disabled = true; // Disable the button
+            const horizonsId = document.getElementsByName('horizons_id')[0].value;
+            if (horizonsId) {
+                fetch('/get_horizons_coordinates', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `horizons_id=${horizonsId}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    horizonsButton.innerText = originalText;
+                    horizonsButton.style.backgroundColor = originalColor; // Revert to original color
+                    horizonsButton.disabled = false; // Re-enable the button
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        document.getElementsByName('horizons_id')[0].value = horizonsId; // Ensure Horizons ID stays the same
+                        document.getElementsByName('ra_hours')[0].value = data.ra_hours;
+                        document.getElementsByName('ra_minutes')[0].value = data.ra_minutes;
+                        document.getElementsByName('ra_seconds')[0].value = data.ra_seconds;
+                        document.getElementsByName('dec_degrees')[0].value = data.dec_degrees;
+                        document.getElementsByName('dec_minutes')[0].value = data.dec_minutes;
+                        document.getElementsByName('dec_seconds')[0].value = data.dec_seconds;
+                        checkFormCompletion(); // Check form completion after setting the values
+                    }
+                })
+                .catch(error => {
+                    horizonsButton.innerText = originalText;
+                    horizonsButton.style.backgroundColor = originalColor; // Revert to original color
+                    horizonsButton.disabled = false; // Re-enable the button
+                    console.error('Error:', error);
+                });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementsByName('source_id')[0].addEventListener('input', checkFormCompletion);
+            document.getElementsByName('ra_hours')[0].addEventListener('input', checkFormCompletion);
+            document.getElementsByName('ra_minutes')[0].addEventListener('input', checkFormCompletion);
+            document.getElementsByName('ra_seconds')[0].addEventListener('input', checkFormCompletion);
+            document.getElementsByName('dec_degrees')[0].addEventListener('input', checkFormCompletion);
+            document.getElementsByName('dec_minutes')[0].addEventListener('input', checkFormCompletion);
+            document.getElementsByName('dec_seconds')[0].addEventListener('input', checkFormCompletion);
+            document.getElementsByName('search_degrees')[0].addEventListener('input', checkFormCompletion);
+        });
+
+        window.onload = function () {
+            makeAllSortable();
+            document.getElementById('searchButton').disabled = true;
+
+            var inputs = document.querySelectorAll('input');
+            inputs.forEach(function(input) {
+                input.addEventListener('input', checkFormCompletion);
+            });
+
+            document.querySelector('th:nth-child(3)').classList.add('sorted-asc');
+
+            // Obtener el valor de search_grados y multiplicarlo por 2
+            var searchGrados = parseFloat('{{ search_grados }}');
+            var searchGradosAltura = searchGrados * 8;
+
+            var aladin = A.aladin('#aladin-lite-div', {
+                survey: 'P/DSS2/color',
+                fov: searchGradosAltura, // Usar el valor multiplicado para el campo de visión
+                target: '{{ target_ra_dec }}'
+            });
+
+
+            var cat = A.catalog({name: 'Search Results', sourceSize: 14, color: 'red'});
+            aladin.addCatalog(cat);
+
+            {% for result in results %}
+                {% if result.data.bp_rp is not none and -100 < result.data.bp_rp < 0.52 %}
+                    cat.addSources([A.marker({{ result.data.ra_J2000 }}, {{ result.data.dec_J2000 }}, {
+                        popupTitle: '<span style="color: black;">Source ID: {{ result.data.source_id }}</span>',
+                        popupDesc: '<em style="color: black;">RA:</em> <span style="color: black;">{{ result.data.ra_J2000_Str }}</span><br/><em style="color: black;">Dec:</em> <span style="color: black;">{{ result.data.dec_J2000_Str }}</span><br/><em style="color: black;">Mag g:</em> <span style="color: black;">{{ result.data.phot_g_mean_mag }}</span><br/><em style="color: black;">bp-rp:</em> <span style="color: black;">{{ result.data.bp_rp }}</span><br/><em style="color: black;">Teff:</em> <span style="color: black;">{{ result.data.teff_gspphot }}</span></br>'
+                    })]);
+                {% endif %}
+            {% endfor %}
+
+            var cat = A.catalog({name: 'Search Results', sourceSize: 14, color: 'yellow'});
+            aladin.addCatalog(cat);
+
+            {% for result in results %}
+                {% if result.data.bp_rp is not none and 0.52 <= result.data.bp_rp < 1.12 %}
+                    cat.addSources([A.marker({{ result.data.ra_J2000 }}, {{ result.data.dec_J2000 }}, {
+                        popupTitle: '<span style="color: black;">Source ID: {{ result.data.source_id }}</span>',
+                        popupDesc: '<em style="color: black;">RA:</em> <span style="color: black;">{{ result.data.ra_J2000_Str }}</span><br/><em style="color: black;">Dec:</em> <span style="color: black;">{{ result.data.dec_J2000_Str }}</span><br/><em style="color: black;">Mag g:</em> <span style="color: black;">{{ result.data.phot_g_mean_mag }}</span><br/><em style="color: black;">bp-rp:</em> <span style="color: black;">{{ result.data.bp_rp }}</span><br/><em style="color: black;">Teff:</em> <span style="color: black;">{{ result.data.teff_gspphot }}</span></br>'
+                    })]);
+                {% endif %}
+            {% endfor %}
+
+            var cat = A.catalog({name: 'Search Results', sourceSize: 14, color: 'blue'});
+            aladin.addCatalog(cat);
+
+            {% for result in results %}
+                {% if result.data.bp_rp is not none and 1.12 <= result.data.bp_rp < 100 %}
+                    cat.addSources([A.marker({{ result.data.ra_J2000 }}, {{ result.data.dec_J2000 }}, {
+                        popupTitle: '<span style="color: black;">Source ID: {{ result.data.source_id }}</span>',
+                        popupDesc: '<em style="color: black;">RA:</em> <span style="color: black;">{{ result.data.ra_J2000_Str }}</span><br/><em style="color: black;">Dec:</em> <span style="color: black;">{{ result.data.dec_J2000_Str }}</span><br/><em style="color: black;">Mag g:</em> <span style="color: black;">{{ result.data.phot_g_mean_mag }}</span><br/><em style="color: black;">bp-rp:</em> <span style="color: black;">{{ result.data.bp_rp }}</span><br/><em style="color: black;">Teff:</em> <span style="color: black;">{{ result.data.teff_gspphot }}</span></br>'
+                    })]);
+                {% endif %}
+            {% endfor %}
+
+            var searchCoordinates = '{{ target_ra_dec }}'.split(' ');
+            var searchRA = parseFloat(searchCoordinates[0]);
+            var searchDec = parseFloat(searchCoordinates[1]);
+            var overlay = A.graphicOverlay({color: '#e2345', lineWidth: 1});
+            aladin.addOverlay(overlay);
+            overlay.add(A.circle(searchRA, searchDec, '{{ search_grados }}', {color: 'cyan'})); // radius in degrees
+            consentBanner();
+        };
+
+        function getCoordinatesByHD() {
+            const hdId = document.getElementsByName('hd_id')[0].value;
+            if (hdId) {
+                fetch('/get_simbad_coordinates', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `hd_id=${hdId}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        document.getElementsByName('ra_hours')[0].value = data.ra_hours;
+                        document.getElementsByName('ra_minutes')[0].value = data.ra_minutes;
+                        document.getElementsByName('ra_seconds')[0].value = data.ra_seconds;
+                        document.getElementsByName('dec_degrees')[0].value = data.dec_degrees;
+                        document.getElementsByName('dec_minutes')[0].value = data.dec_minutes;
+                        document.getElementsByName('dec_seconds')[0].value = data.dec_seconds;
+                        checkFormCompletion();  // Check form completion after setting the values
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            }
+        }
+    </script>
+
+</head>
+<body>
+
+<div class="container logo-container">
+    <a href="https://gaia.seidelingenieria.com:5002/GaiaDR3">
+        <img src="{{ url_for('static', filename='Imagenes/logov4.png') }}" alt="GaiaFinder">
+    </a>
+    <!-- <a href="https://seidelingenieria.com/">
+        <img src="{{ url_for('static', filename='Imagenes/Seidel_verde_H.png') }}" alt="Seidel Ingeniería Logo">
+    </a> -->
+</div>
+
+<div class="container form-container">
+    <form action="/GaiaDR3" method="post" onsubmit="return setSearchState()">
+        <fieldset>
+            <legend>1 - Criterios de Filtrado</legend>
+            <div class="form-row">
+                <div class="form-group wide-input">
+                    <label>Source ID</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" name="source_id" placeholder="Source ID" value="{{ source_id }}">
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-primary" onclick="getCoordinatesBySourceID()">Buscar Coordenadas</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group wide-input">
+                    <label>Código NASA/Horizons JPL</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" name="horizons_id" placeholder="Código NASA/Horizons JPL">
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-primary" onclick="getCoordinatesByHorizonsID()">Consultar Coordenadas</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group wide-input">
+                    <label>Identificador HD</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" name="hd_id" placeholder="Identificador HD">
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-primary" onclick="getCoordinatesByHD()">Consultar Coordenadas</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>RA J2000</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control small-input" name="ra_hours" placeholder="Horas" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="{{ ra_hours }}">
+                        <input type="text" class="form-control small-input" name="ra_minutes" placeholder="Minutos" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="{{ ra_minutes }}">
+                        <input type="text" class="form-control small-input" name="ra_seconds" placeholder="Segundos" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="{{ ra_seconds }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>DEC J2000</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control small-input" name="dec_degrees" placeholder="Grados" inputmode="decimal" pattern="-?[0-9]*\.?[0-9]*" value="{{ dec_degrees }}">
+                        <input type="text" class="form-control small-input" name="dec_minutes" placeholder="Minutos" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="{{ dec_minutes }}">
+                        <input type="text" class="form-control small-input" name="dec_seconds" placeholder="Segundos" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="{{ dec_seconds }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Radio [0.01º a 0.5º]</label>
+                    <input type="number" class="form-control small-input" name="search_degrees" placeholder="Grados" value="{{ search_grados or '0.05' }}" min="0" max="0.5" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Ind. Color (bp-rp)</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control small-input" name="bp_rp_min" placeholder="Min" step="0.01" value="{{ bp_rp_min }}">
+                        <input type="number" class="form-control small-input" name="bp_rp_max" placeholder="Max" step="0.01" value="{{ bp_rp_max }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Mag g</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control small-input" name="mag_g_min" placeholder="Min" step="0.01" value="{{ mag_g_min }}">
+                        <input type="number" class="form-control small-input" name="mag_g_max" placeholder="Max" step="0.01" value="{{ mag_g_max }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Teff</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control small-input" name="teff_min" placeholder="Min" step="1" value="{{ teff_min }}">
+                        <input type="number" class="form-control small-input" name="teff_max" placeholder="Max" step="1" value="{{ teff_max }}">
+                    </div>
+                </div>
+                <div class="form-group btn-container">
+                    <input id="searchButton" type="submit" value="Buscar" class="btn btn-success btn-lg mt-4" disabled>
+                    <a href="/GaiaDR3" class="btn btn-secondary btn-lg mt-4">Nueva</a>
+                </div>
+            </div>
+        </fieldset>
+    </form>
+</div>
+
+<div class="container table-container">
+    <fieldset>
+        <legend>
+            <div> 2 - Mapa de Aladin. </div>
+         </legend>
+        <div> (bp-rp)   ->  rojo ∈ (-100, 0.52), amarillo ∈ [0.52, 1.12), azul ∈ [1.12, 100)</div>
+        <div> SOL       ->  (bp-rp) = [0,82 y 0,85] - Teff = 5778 ºK </div>
+        <div id="aladin-lite-div" style="width: 100%; height: 500px;"></div>
+    </fieldset>
+</div>
+
+<div class="container table-container">
+    <fieldset>
+        <legend>3 - Resultados {{ num_results }} objetos encontrados | {{ execution_time }} segundos</legend>
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th class="sortable">RA J2000</th>
+                        <th class="sortable">DEC J2000</th>
+                        <th class="sortable sorted-asc">Distancia<br>angular</th>
+                        <th class="sortable">Espectro</th>
+                        <th class="sortable">Espectro Continuo</th>
+                        <th class="sortable">Temp<br>Efectiva</th>
+                        <th class="sortable">Mag g</th>
+                        <th class="sortable">Ind. Color (bp-rp)</th>
+                        <th class="sortable">Mag bp</th>
+                        <th class="sortable">Mag rp</th>
+                        <th class="sortable">Parsecs</th>
+                        <th class="sortable">Prob.<br>Quasar</th>
+                        <th class="sortable">Prob.<br>Galaxia</th>
+                        <th class="sortable">Prob.<br>Estrella</th>
+                        <th class="sortable">Paralaje</th>
+                        <th class="sortable">Tránsitos</th>
+                        <th class="sortable">Source_id</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in results %}
+                        <tr>
+                            <td>{{ result.data.ra_J2000_Str }}</td>
+                            <td>{{ result.data.dec_J2000_Str }}</td>
+                            <td>{{ result.distance }}</td>
+                            <td>
+                                {% if result.data.has_xp_sampled %}
+                                    <a href="{{ result.urlSpectrumSampled }}" target="_blank">Ver</a>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if result.data.has_xp_sampled %}
+                                    <!-- <a href="{{ url_for('plot_continuous_spectrum', source_id=result.data.source_id) }}" target="_blank">Ver</a> -->>
+                                    <a href="{{ result.urlSpectrumContinuos }}" target="_blank">Ver</a>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ result.data.teff_gspphot}}</td>
+                            <td>{{ result.data.phot_g_mean_mag}}</td>
+                            <td>{{ result.data.bp_rp}}</td>
+                            <td>{{ result.data.phot_bp_mean_mag}}</td>
+                            <td>{{ result.data.phot_rp_mean_mag}}</td>
+                            <td>{{ result.data.distance_gspphot}}</td>
+                            <td>{{ result.data.classprob_dsc_combmod_quasar}}</td>
+                            <td>{{ result.data.classprob_dsc_combmod_galaxy}}</td>
+                            <td>{{ result.data.classprob_dsc_combmod_star}}</td>
+                            <td>{{ result.data.parallax}}</td>
+                            <td>{{ result.data.matched_transits}}</td>
+                            <td>{{ result.data.source_id }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <ol class="notes-list">
+            <li>Esteban Fernández Mañanes</li>
+            <li>Esta web permite buscar por coordenadas J2000 en el catálogo Gaia DR3 los objetos, y si existe, su espectro.</li>
+            <li>La tabla principal del catálogo que contiene más de 1.800 millones de registros y tiene un tamaño 9,8 Terabytes. Es posible que tarde unos segundos en mostrar los resultados.</li>
+            <li>Cualquier problema o sugerencia: info@observatorio-estelia.es</li>
+            <li>Se recomienda usar dos decimales en los segundos para mejorar la precision de la búsqueda</li>
+            <li>Usar . para las cifras decimales: Ej: 23.34</li>
+            <li>Distancia ángular de búsqueda por defecto es de 0,01º. A mayores distancias, mayor tiempo de búsqueda</li>
+        </ol>
+    </fieldset>
+</div>
+
+<!-- <footer>
+    <p>&copy; 2024 Observatorio ESTELIA + <a href="https://seidelingenieria.com/" style="color: #FFFFFF;">Seidel Ingeniería Informática S.L. - Desarrollo de software a medida.</a>
+     - <a href="mailto:info@observatorio-estelia.es" style="color: #FFFFFF;">Contacto: info@observatorio-estelia.es</a></p>
+</footer> -->
+
+</body>
+</html>

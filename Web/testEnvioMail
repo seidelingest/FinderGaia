@@ -1,0 +1,21 @@
+import smtplib
+from email.mime.text import MIMEText
+
+# Detalles de la cuenta
+smtp_server = 'smtp.office365.com'
+smtp_port = 587
+username = 'tu_correo@dominio.com'
+password = 'tu_contraseña'
+
+# Crear mensaje
+msg = MIMEText('Este es el cuerpo del mensaje')
+msg['Subject'] = 'Asunto del correo'
+msg['From'] = username
+msg['To'] = 'destinatario@dominio.com'
+
+# Enviar correo
+server = smtplib.SMTP(smtp_server, smtp_port)
+server.starttls()  # Iniciar encriptación TLS
+server.login(username, password)
+server.send_message(msg)
+server.quit()
