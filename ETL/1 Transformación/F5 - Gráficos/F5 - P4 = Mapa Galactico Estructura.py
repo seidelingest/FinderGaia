@@ -1,5 +1,5 @@
 # ==========================================================
-# ETL F5:P3 -> MAPA GALÁCTICO (PROGRESO SIMPLE)
+# ETL F5:P4 -> MAPA GALÁCTICO (PROGRESO SIMPLE)
 # ==========================================================
 
 import time
@@ -14,7 +14,7 @@ MONGO_URI = "mongodb://localhost:27017/"
 DB_NAME = "TFM"
 
 SOURCE_COLLECTION = "Gaia DR3"
-TARGET_COLLECTION = "F5:P3 -> Mapa Galactico Estructura"
+TARGET_COLLECTION = "F5:P4 -> Mapa Galactico Estructura"
 
 FIELD_RA = "ra"
 FIELD_DEC = "dec"
@@ -26,9 +26,9 @@ MAX_BP_RP = 0.8
 MIN_POE = 3.0
 MAX_DISTANCE_KPC = 8.0
 
-READ_BLOCK = 300_000
-WRITE_BATCH = 20_000
-PRINT_STEP = 2_000_000
+READ_BLOCK = 1_000_000
+WRITE_BATCH = 100_000
+PRINT_STEP = 1_000_000
 
 EQ_TO_GAL = np.array([
     [-0.0548755604, -0.8734370902, -0.4838350155],
