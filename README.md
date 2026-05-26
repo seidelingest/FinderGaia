@@ -1,5 +1,7 @@
 # GaiaFinder
 
+[![DOI](https://zenodo.org/badge/1189747316.svg)](https://doi.org/10.5281/zenodo.20388075)
+
 Plataforma Big Data para exploración, consulta y visualización astronómica basada en el catálogo Gaia DR3 de la Agencia Espacial Europea (ESA).
 
 ## Descripción
