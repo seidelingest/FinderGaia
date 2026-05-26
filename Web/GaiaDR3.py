@@ -18,30 +18,85 @@ from datetime import datetime
 from waitress import serve  # Ensure waitress's serve is imported
 from astroquery.simbad import Simbad
 from bokeh.models import ColumnDataSource, Span, Label, WheelZoomTool
+from time import time
+from flask import jsonify
 
 app = Flask(__name__)
 client = MongoClient('mongodb://localhost:27017/')
 db = client['TFM']
 
+# ==========================================================
+# OBTENER IP EXTERNA
+# ==========================================================
+
+def get_client_ip(req):
+    """
+    Obtiene la IP real del cliente considerando proxies / nginx
+    """
+    # Caso 1: múltiples proxies
+    x_forwarded_for = req.headers.get("X-Forwarded-For")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+
+    # Caso 2: nginx directo
+    x_real_ip = req.headers.get("X-Real-IP")
+    if x_real_ip:
+        return x_real_ip
+
+    # Caso 3: fallback (IP interna)
+    return req.remote_addr
+
+# ==========================================================
+# LOGGING GENERAL USO EN LA WEB
+# ==========================================================
+
 def log_event(req, description):
-    if req.headers.getlist("X-Forwarded-For"):
-        client_ip = req.headers.getlist("X-Forwarded-For")[0]
-    else:
-        client_ip = req.remote_addr
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        client_ip = get_client_ip(req)
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    print(f"{current_time}" + " | " + f"{client_ip}" + " | " + f"{description}")
-    # Crear un diccionario con la información del evento
-    event = {
-        "timestamp": current_time,
-        "ip_address": client_ip,
-        "description": description
-    }
+        event = {
+            "timestamp": current_time,
+            "ip_address": client_ip,
+            "description": description
+        }
 
-    # Insertar el evento en la colección "eventos"
-    db['Evento'].insert_one(event)
+        db['Evento'].insert_one(event)
 
-    print(f"{current_time} | {client_ip} | {description}")
+        print(f"{current_time} | {client_ip} | {description}")
+
+    except Exception as e:
+        print(f"Logging error: {e}")
+
+
+# ==========================================================
+# LOGGING API
+# ==========================================================
+
+@app.before_request
+def start_timer():
+    request.start_time = time()
+
+
+@app.after_request
+def log_response(response):
+    try:
+        duration = round(time() - request.start_time, 4)
+
+        full_path = request.full_path.rstrip('?')
+
+        user_agent = request.headers.get("User-Agent")
+
+        log_event(
+            request,
+            f"{request.method} {full_path} | {response.status_code} | {duration}s | {user_agent}"
+        )
+
+    except Exception as e:
+        print(f"Error logging response: {e}")
+
+    return response
+
 
 
 def hms_to_decimal(ra_str):
@@ -283,7 +338,7 @@ def decimal_to_equatorial(ra=None, dec=None):
     return result
 
 
-@app.route('/plot_sampled_spectrum/<doc_id>', methods=['GET'])
+@app.route('/GaiaDR3/plot_sampled_spectrum/<doc_id>', methods=['GET'])
 def plot_sampled_spectrum(doc_id=None):
     doc_id = int(doc_id)
     db = MongoClient('mongodb://localhost:27017/')['TFM']
@@ -597,6 +652,8 @@ def perform_geospatial_search(user_ra, user_dec, max_angular_distance, soloConEs
             for field in numeric_fields:
                 if field in result and result[field] is not None:
                     result[field] = float(result[field])
+                else:
+                    result[field] = None
 
             star_prob = result.get('classprob_dsc_combmod_star') or 0
             galaxy_prob = result.get('classprob_dsc_combmod_galaxy') or 0
@@ -639,8 +696,8 @@ def perform_geospatial_search(user_ra, user_dec, max_angular_distance, soloConEs
             result_with_distance = {
                 'data': result,
                 'distance': round(distance_degrees, 2),
-                'urlSpectrumSampled': f"https://gaia.seidelingenieria.com:5002/plot_sampled_spectrum/{result['source_id']}",
-                'urlSpectrumContinuos': f"https://gaia.seidelingenieria.com:5002/plot_continuos_spectrum/{result['source_id']}",
+                'urlSpectrumSampled': f"/GaiaDR3/plot_sampled_spectrum/{result['source_id']}",
+                'urlSpectrumContinuos': f"/GaiaDR3/plot_continuous_spectrum/{result['source_id']}",
                 'symbol': symbol,
             }
             results_with_distance.append(result_with_distance)
@@ -840,6 +897,62 @@ def search():
     return render_template('GaiaDR3.html', num_results=0, execution_time=0, target_ra_dec='')
 
 
+import time as time_module
+
+@app.route('/api/GaiaDR3/search_debug', methods=['POST'])
+def search_debug():
+    try:
+        ra_hours = request.form.get('ra_hours')
+        ra_minutes = request.form.get('ra_minutes')
+        ra_seconds = request.form.get('ra_seconds')
+        dec_degrees = request.form.get('dec_degrees')
+        dec_minutes = request.form.get('dec_minutes')
+        dec_seconds = request.form.get('dec_seconds')
+        search_grados = request.form.get('search_degrees', '0.01')
+
+        if not all([ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds]):
+            return jsonify({"error": "Parámetros incompletos"}), 400
+
+        try:
+            ra_hours = float(ra_hours)
+            ra_minutes = float(ra_minutes)
+            ra_seconds = float(ra_seconds)
+            dec_degrees = float(dec_degrees)
+            dec_minutes = float(dec_minutes)
+            dec_seconds = float(dec_seconds)
+            search_grados = min(float(search_grados), 0.5)
+        except ValueError:
+            return jsonify({"error": "Parámetros inválidos"}), 400
+
+        ra_J2000 = (ra_hours + ra_minutes/60 + ra_seconds/3600) * 15.0
+        dec_J2000 = get_decimal_degrees(dec_degrees, dec_minutes, dec_seconds)
+
+        soloConEspectro = 'showSpectra' in request.form
+
+        # 🔥 MEDICIÓN CORRECTA
+        start_time = time_module.perf_counter()
+
+        results = perform_geospatial_search(
+            ra_J2000, dec_J2000, search_grados, soloConEspectro,
+            request.form.get('bp_rp_min') or None,
+            request.form.get('bp_rp_max') or None,
+            request.form.get('mag_g_min') or None,
+            request.form.get('mag_g_max') or None,
+            request.form.get('teff_min') or None,
+            request.form.get('teff_max') or None
+        )
+
+        execution_time = time_module.perf_counter() - start_time
+
+        return jsonify({
+            "execution_time": round(execution_time, 4),
+            "record_count": len(results),
+            "search_degrees": search_grados
+        })
+
+    except Exception as e:
+        print("ERROR EN API:", e)  # 🔥 LOG IMPORTANTE
+        return jsonify({"error": str(e)}), 500
 
 
 def round_result_fields(result):
@@ -862,6 +975,49 @@ def round_result_fields(result):
     return result
 
 
+# ==========================================================
+# ENDPOINTS ESPACIO DE DATOS
+# ==========================================================
+
+@app.route("/api/GaiaDR3/dataset", methods=["GET"])
+def dataset():
+    try:
+        docs = db["Gaia DR3"].find(
+            {},
+            {"_id": 0}
+        ).limit(1000)
+
+        return jsonify(list(docs))
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/GaiaDR3/cone-search", methods=["GET"])
+def cone_search():
+    try:
+        ra = float(request.args.get("ra"))
+        dec = float(request.args.get("dec"))
+        radius = float(request.args.get("radius", 0.1))
+
+        query = {
+            "ra": {"$gte": ra - radius, "$lte": ra + radius},
+            "dec": {"$gte": dec - radius, "$lte": dec + radius}
+        }
+
+        docs = db["Gaia DR3"].find(
+            query,
+            {"_id": 0}
+        ).limit(1000)
+
+        return jsonify(list(docs))
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
 if __name__ == '__main__':
-    app.run(host='192.168.2.19', debug=True)
-   #serve(app, host='192.168.200.80', port=5000)
+   app.run(host='localhost', debug=False)
+   #serve(app, host='192.168.200.80', port=5000, threads=12)

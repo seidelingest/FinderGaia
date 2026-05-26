@@ -9,7 +9,7 @@
       gtag('js', new Date());
 
       gtag('config', 'G-2LBH764EV6');
-    </script>A
+    </script>
 
     <meta charset="utf-8">
     <link rel="icon" href="{{ url_for('static', filename='Imagenes/GaiaFinder_logo.ico') }}" type="image/x-icon">
@@ -397,7 +397,7 @@
             aladin.addCatalog(cat);
 
             {% for result in results %}
-                {% if result.data.bp_rp is not none and -100 < result.data.bp_rp < 0.52 %}
+                {% if result.data.bp_rp is not none and result.data.bp_rp > -100 and result.data.bp_rp < 0.52 %}
                     cat.addSources([A.marker({{ result.data.ra_J2000 }}, {{ result.data.dec_J2000 }}, {
                         popupTitle: '<span style="color: black;">Source ID: {{ result.data.source_id }}</span>',
                         popupDesc: '<em style="color: black;">RA:</em> <span style="color: black;">{{ result.data.ra_J2000_Str }}</span><br/><em style="color: black;">Dec:</em> <span style="color: black;">{{ result.data.dec_J2000_Str }}</span><br/><em style="color: black;">Mag g:</em> <span style="color: black;">{{ result.data.phot_g_mean_mag }}</span><br/><em style="color: black;">bp-rp:</em> <span style="color: black;">{{ result.data.bp_rp }}</span><br/><em style="color: black;">Teff:</em> <span style="color: black;">{{ result.data.teff_gspphot }}</span></br>'
@@ -409,7 +409,7 @@
             aladin.addCatalog(cat);
 
             {% for result in results %}
-                {% if result.data.bp_rp is not none and 0.52 <= result.data.bp_rp < 1.12 %}
+                {% if result.data.bp_rp is not none and result.data.bp_rp >= 0.52 and result.data.bp_rp < 1.12 %}
                     cat.addSources([A.marker({{ result.data.ra_J2000 }}, {{ result.data.dec_J2000 }}, {
                         popupTitle: '<span style="color: black;">Source ID: {{ result.data.source_id }}</span>',
                         popupDesc: '<em style="color: black;">RA:</em> <span style="color: black;">{{ result.data.ra_J2000_Str }}</span><br/><em style="color: black;">Dec:</em> <span style="color: black;">{{ result.data.dec_J2000_Str }}</span><br/><em style="color: black;">Mag g:</em> <span style="color: black;">{{ result.data.phot_g_mean_mag }}</span><br/><em style="color: black;">bp-rp:</em> <span style="color: black;">{{ result.data.bp_rp }}</span><br/><em style="color: black;">Teff:</em> <span style="color: black;">{{ result.data.teff_gspphot }}</span></br>'
@@ -421,7 +421,7 @@
             aladin.addCatalog(cat);
 
             {% for result in results %}
-                {% if result.data.bp_rp is not none and 1.12 <= result.data.bp_rp < 100 %}
+                {% if result.data.bp_rp is not none and result.data.bp_rp >= 1.12 and result.data.bp_rp < 100 %}
                     cat.addSources([A.marker({{ result.data.ra_J2000 }}, {{ result.data.dec_J2000 }}, {
                         popupTitle: '<span style="color: black;">Source ID: {{ result.data.source_id }}</span>',
                         popupDesc: '<em style="color: black;">RA:</em> <span style="color: black;">{{ result.data.ra_J2000_Str }}</span><br/><em style="color: black;">Dec:</em> <span style="color: black;">{{ result.data.dec_J2000_Str }}</span><br/><em style="color: black;">Mag g:</em> <span style="color: black;">{{ result.data.phot_g_mean_mag }}</span><br/><em style="color: black;">bp-rp:</em> <span style="color: black;">{{ result.data.bp_rp }}</span><br/><em style="color: black;">Teff:</em> <span style="color: black;">{{ result.data.teff_gspphot }}</span></br>'
@@ -474,9 +474,9 @@
     <a href="https://gaia.seidelingenieria.com:5002/GaiaDR3">
         <img src="{{ url_for('static', filename='Imagenes/logov4.png') }}" alt="GaiaFinder">
     </a>
-    <!-- <a href="https://seidelingenieria.com/">
+    <a href="https://seidelingenieria.com/">
         <img src="{{ url_for('static', filename='Imagenes/Seidel_verde_H.png') }}" alt="Seidel Ingeniería Logo">
-    </a> -->
+    </a>
 </div>
 
 <div class="container form-container">
@@ -585,7 +585,6 @@
                         <th class="sortable">DEC J2000</th>
                         <th class="sortable sorted-asc">Distancia<br>angular</th>
                         <th class="sortable">Espectro</th>
-                        <th class="sortable">Espectro Continuo</th>
                         <th class="sortable">Temp<br>Efectiva</th>
                         <th class="sortable">Mag g</th>
                         <th class="sortable">Ind. Color (bp-rp)</th>
@@ -608,15 +607,7 @@
                             <td>{{ result.distance }}</td>
                             <td>
                                 {% if result.data.has_xp_sampled %}
-                                    <a href="{{ result.urlSpectrumSampled }}" target="_blank">Ver</a>
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if result.data.has_xp_sampled %}
-                                    <!-- <a href="{{ url_for('plot_continuous_spectrum', source_id=result.data.source_id) }}" target="_blank">Ver</a> -->>
-                                    <a href="{{ result.urlSpectrumContinuos }}" target="_blank">Ver</a>
+                                    <a href="{{ result.urlSpectrumSampled  }}" target="_blank">Ver</a>
                                 {% else %}
                                     -
                                 {% endif %}
@@ -643,7 +634,6 @@
             <li>Esteban Fernández Mañanes</li>
             <li>Esta web permite buscar por coordenadas J2000 en el catálogo Gaia DR3 los objetos, y si existe, su espectro.</li>
             <li>La tabla principal del catálogo que contiene más de 1.800 millones de registros y tiene un tamaño 9,8 Terabytes. Es posible que tarde unos segundos en mostrar los resultados.</li>
-            <li>Cualquier problema o sugerencia: info@observatorio-estelia.es</li>
             <li>Se recomienda usar dos decimales en los segundos para mejorar la precision de la búsqueda</li>
             <li>Usar . para las cifras decimales: Ej: 23.34</li>
             <li>Distancia ángular de búsqueda por defecto es de 0,01º. A mayores distancias, mayor tiempo de búsqueda</li>
@@ -651,10 +641,9 @@
     </fieldset>
 </div>
 
-<!-- <footer>
-    <p>&copy; 2024 Observatorio ESTELIA + <a href="https://seidelingenieria.com/" style="color: #FFFFFF;">Seidel Ingeniería Informática S.L. - Desarrollo de software a medida.</a>
-     - <a href="mailto:info@observatorio-estelia.es" style="color: #FFFFFF;">Contacto: info@observatorio-estelia.es</a></p>
-</footer> -->
+<footer>
+    <p>&copy; 2026 <a href="https://seidelingenieria.com/" style="color: #FFFFFF;">Seidel Ingeniería Informática S.L. - Desarrollo de software a medida.</a>
+</footer>
 
 </body>
 </html>

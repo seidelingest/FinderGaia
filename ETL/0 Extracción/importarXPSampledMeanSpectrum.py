@@ -1,76 +1,102 @@
 import os
 import gzip
-import shutil
 import pandas as pd
-from pymongo import MongoClient
+from pymongo import MongoClient, InsertOne
 from concurrent.futures import ThreadPoolExecutor
 
-# Conectar a MongoDB
-client = MongoClient('mongodb://localhost:27017/')
+# =========================
+# CONFIG
+# =========================
+
+BATCH_SIZE = 5000
+CHUNK_SIZE = 2000
+MAX_WORKERS = 4  # Ajustar según CPU / disco
+
+DIRECTORIO = r'O:\Catalogo Gaia\DR3\xp_sampled_mean_spectrum'
+
+# =========================
+# MONGO
+# =========================
+
+client = MongoClient(
+    'mongodb://localhost:27017/?compressors=zstd',
+    maxPoolSize=10,
+    retryWrites=False
+)
+
 db = client['TFM']
 collection = db['Gaia DR3 XP Sampled Mean Spectrum']
 
-print('Borrando datos de la colección')
+print('🧹 Borrando colección...')
 collection.delete_many({})
 
-# Directorio donde están los archivos .gz
-directorio = r'M:\Catalogo\Gaia DR3\Spectra\xp sampled mean spectrum'
+# (Opcional) índice para consultas
+collection.create_index("source_id")
 
+# =========================
+# FUNCIONES
+# =========================
 
-# Función para convertir la cadena a una lista de floats
-def string_to_float_list(s):
-    # Elimina los corchetes y divide la cadena por las comas
-    numbers = s.strip("[]").split(",")
-    # Convierte cada número a float y devuelve una lista
-    return [float(num) for num in numbers]
+def string_to_float_list_fast(s):
+    # Conversión rápida sin overhead innecesario
+    return list(map(float, s.strip("[]").split(",")))
+
 
 def procesar_archivo(archivo):
-    # Comprobar si el archivo es un archivo .gz
-    if archivo.endswith('.gz'):
-        # Ruta completa al archivo .gz
-        ruta_archivo_gz = os.path.join(directorio, archivo)
-        # Ruta al archivo descomprimido (sin la extensión .gz)
-        ruta_archivo_descomprimido = ruta_archivo_gz[:-3]
 
-        # Abrir el archivo .gz y el archivo descomprimido
-        with gzip.open(ruta_archivo_gz, 'rb') as f_in, open(ruta_archivo_descomprimido, 'wb') as f_out:
-            print(ruta_archivo_gz + ' Descomprimiendo ')
+    ruta = os.path.join(DIRECTORIO, archivo)
+    print(f"🚀 Procesando {archivo}")
 
-            # Copiar el contenido del archivo .gz al archivo descomprimido
-            shutil.copyfileobj(f_in, f_out)
+    operaciones = []
+    total = 0
 
-        # Abre el archivo en modo de lectura y lee todas las líneas en una lista
-        print(ruta_archivo_gz + ' Abriendo CSV en modo txt')
-        with open(ruta_archivo_descomprimido, 'r') as f:
-            lines = f.readlines()
+    with gzip.open(ruta, 'rt') as f:
 
-        # Elimina las primeras 63 líneas de la lista
-        del lines[0:63]
+        # Leer CSV correctamente (sin next manual)
+        reader = pd.read_csv(
+            f,
+            skiprows=63,
+            chunksize=CHUNK_SIZE
+        )
 
-        # Abre el archivo en modo de escritura y escribe las líneas restantes al archivo
-        print(ruta_archivo_gz+ ' Guardar CSV ')
-        with open(ruta_archivo_descomprimido, 'w') as f:
-            f.writelines(lines)
+        for chunk in reader:
 
-        # Leer el archivo descomprimido a partir de la línea 1001
-        print(ruta_archivo_gz + ' Leyendo CSV Reducido')
-        df = pd.read_csv(ruta_archivo_descomprimido)
-        df["flux"] = df["flux"].apply(string_to_float_list)
-        df["flux_error"] = df["flux_error"].apply(string_to_float_list)
+            # Conversión columnas pesadas
+            chunk["flux"] = chunk["flux"].map(string_to_float_list_fast)
+            chunk["flux_error"] = chunk["flux_error"].map(string_to_float_list_fast)
+
+            # Preparar documentos
+            for doc in chunk.to_dict('records'):
+
+                # 🔥 CLAVE: eliminar _id SIEMPRE
+                doc.pop('_id', None)
+
+                operaciones.append(InsertOne(doc))
+
+            # Insert batch
+            if len(operaciones) >= BATCH_SIZE:
+                collection.bulk_write(operaciones, ordered=False)
+                total += len(operaciones)
+                print(f"{archivo} -> {total} docs")
+                operaciones = []
+
+    # Último batch
+    if operaciones:
+        collection.bulk_write(operaciones, ordered=False)
+        total += len(operaciones)
+
+    print(f"✅ {archivo} completado -> {total} docs")
 
 
-        # Insertar los datos en MongoDB
-        print(ruta_archivo_gz + ' Insertando en BBDD')
-        collection.insert_many(df.to_dict('records'))
+# =========================
+# EJECUCIÓN
+# =========================
 
-    # Borrar el archivo descomprimido
-    print(ruta_archivo_gz + ' Borrando Archivo ')
-    os.remove(ruta_archivo_descomprimido)
+archivos = [f for f in os.listdir(DIRECTORIO) if f.endswith('.gz')]
 
+print(f"📦 Total archivos: {len(archivos)}")
 
-# Crear un pool de hilos
-with ThreadPoolExecutor(max_workers=2) as executor:
-    # Recorrer todos los archivos en el directorio
-    archivos = [archivo for archivo in os.listdir(directorio) if archivo.endswith('.gz')]
-    # Enviar los archivos al pool de hilos para ser procesados
+with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
     executor.map(procesar_archivo, archivos)
+
+print("🎯 ETL FINALIZADO")
