@@ -1,29 +1,41 @@
 import io
+from collections.abc import Mapping
+from itertools import islice
+from typing import Any
 from flask import Flask, render_template_string, send_file, jsonify
 import math
 from astroquery.jplhorizons import Horizons
 from datetime import datetime, timedelta  # Asegúrate de que timedelta esté importado
 from numpy.polynomial.hermite import hermval
-from pymongo import MongoClient
-from flask import render_template, request, Flask
+from flask import render_template, request, Flask, url_for
 from bokeh.plotting import figure
 from bokeh.embed import components
 from bokeh.resources import INLINE
-from bokeh.models import ColumnDataSource, Span, Label, WheelZoomTool
+from bokeh.models import ColumnDataSource, Span, Label, Plot, WheelZoomTool
 import pandas as pd
 import numpy as np
 from scipy.signal import savgol_filter, find_peaks
-from pymongo import MongoClient
 from datetime import datetime
-from waitress import serve  # Ensure waitress's serve is imported
 from astroquery.simbad import Simbad
 from bokeh.models import ColumnDataSource, Span, Label, WheelZoomTool
 from time import time
 from flask import jsonify
 
-app = Flask(__name__)
-client = MongoClient('mongodb://localhost:27017/')
-db = client['TFM']
+if __package__:
+    from .configuracion import db, http_host, http_port
+else:
+    from configuracion import db, http_host, http_port
+
+app: Flask = Flask(__name__)
+DEFAULT_SEARCH_RADIUS: float = 0.05
+MIN_WEB_RADIUS: float = 0.01
+MAX_WEB_RADIUS: float = 0.5
+ANGLE_TOLERANCE: float = 1e-12
+CONTINUOUS_SPECTRA: str = 'Gaia DR3 XP Continuos Mean Spectrum'
+COORDINATE_FIELDS: tuple[str, ...] = (
+    'ra_hours', 'ra_minutes', 'ra_seconds', 'dec_degrees', 'dec_minutes', 'dec_seconds',
+)
+FILTER_FIELDS: tuple[str, ...] = ('bp_rp_min', 'bp_rp_max', 'mag_g_min', 'mag_g_max', 'teff_min', 'teff_max')
 
 # ==========================================================
 # OBTENER IP EXTERNA
@@ -314,8 +326,8 @@ spectral_lines = {
 }
 
 
-def decimal_to_equatorial(ra=None, dec=None):
-    result = {}
+def decimal_to_equatorial(ra: float | None = None, dec: float | None = None) -> dict[str, int | float | str]:
+    result: dict[str, int | float | str] = {}
     if ra is not None:
         ra_hours = int(ra // 15)
         ra_minutes = int((ra % 15) * 4)
@@ -325,23 +337,39 @@ def decimal_to_equatorial(ra=None, dec=None):
         result['ra_seconds'] = ra_seconds
 
     if dec is not None:
-        dec_degrees = int(dec)
-        dec_fractional = abs(dec - dec_degrees)
-        dec_minutes = int(dec_fractional * 60)
-        dec_seconds = round((dec_fractional * 60 - dec_minutes) * 60, 2)
-        if dec < 0:
-            dec_degrees = dec_degrees  # Maintain the negative sign
-        result['dec_degrees'] = dec_degrees
+        centiseconds: int = round(abs(dec) * 360000)
+        dec_degrees, remainder = divmod(centiseconds, 360000)
+        dec_minutes, second_centiseconds = divmod(remainder, 6000)
+        negative: bool = math.copysign(1, dec) < 0
+        result['dec_degrees'] = -dec_degrees if negative else dec_degrees
+        result['dec_degrees_text'] = f'-{dec_degrees}' if negative else str(dec_degrees)
         result['dec_minutes'] = dec_minutes
-        result['dec_seconds'] = dec_seconds
+        result['dec_seconds'] = second_centiseconds / 100
 
     return result
+
+
+def _render_spectrum_in_card(plot: Plot, sampled_id: int | None = None) -> str:
+    plot.sizing_mode = 'stretch_both'
+    plot.title.visible = False
+    plot.toolbar_location = 'above'
+    for legend in plot.legend:
+        plot.center.remove(legend)
+        plot.add_layout(legend, 'below')
+        legend.ncols = 2
+        legend.padding = 4
+        legend.margin = 3
+        legend.spacing = 4
+        legend.glyph_width = 14
+        legend.label_standoff = 4
+        legend.label_text_font_size = '8pt'
+    script, div = components(plot)
+    return render_template('EspectroFicha.html', script=script, div=div, resources=INLINE.render(), sampled_id=sampled_id)
 
 
 @app.route('/GaiaDR3/plot_sampled_spectrum/<doc_id>', methods=['GET'])
 def plot_sampled_spectrum(doc_id=None):
     doc_id = int(doc_id)
-    db = MongoClient('mongodb://localhost:27017/')['TFM']
 
     current_doc = db['F3:P2 -> Gaia Spectrum (JOIN) Gaia DR3'].find_one({"GaiaSpec_Source_id": doc_id})
     if not current_doc:
@@ -431,6 +459,9 @@ def plot_sampled_spectrum(doc_id=None):
     p.legend.location = 'top_right'
     p.legend.label_text_font_size = '8pt'
 
+    if request.args.get('embed') == '1':
+        return _render_spectrum_in_card(p, source_id_value)
+
     script, div = components(p)
     resources = INLINE.render()
     return render_template('GraficoSpectroSimple.html', script=script, div=div, resources=resources, current_doc=current_doc)
@@ -438,9 +469,7 @@ def plot_sampled_spectrum(doc_id=None):
 
 @app.route('/plot_continuous_spectrum/<int:source_id>', methods=['GET'])
 def plot_continuous_spectrum(source_id):
-    # Conectar con la base de datos
-    db = MongoClient('mongodb://localhost:27017/')['TFM']
-    spectrum_data = db['Gaia DR3 XP Continuos Mean Spectrum'].find_one({"source_id": source_id})
+    spectrum_data = db[CONTINUOUS_SPECTRA].find_one({"source_id": source_id})
 
     if not spectrum_data:
         return "Espectro continuo no encontrado", 404
@@ -460,16 +489,17 @@ def plot_continuous_spectrum(source_id):
     wavelengths_rp = np.linspace(640, 1000, 1000)
 
     # Reconstrucción del espectro BP y RP aplicando el desplazamiento y el factor de escala
-    bp_spectrum = sum(
-        c * hermite(n)((wavelengths_bp - delta_theta_bp) / theta_bp) for n, c in enumerate(bp_coefficients))
-    rp_spectrum = sum(
-        c * hermite(n)((wavelengths_rp - delta_theta_rp) / theta_rp) for n, c in enumerate(rp_coefficients))
+    bp_spectrum: np.ndarray = hermval((wavelengths_bp - delta_theta_bp) / theta_bp, bp_coefficients)
+    rp_spectrum: np.ndarray = hermval((wavelengths_rp - delta_theta_rp) / theta_rp, rp_coefficients)
 
     # Crear la gráfica con Bokeh
     p = figure(title=f"Espectro Continuo del objeto {source_id}", x_axis_label='Longitud de onda (nm)',
                y_axis_label='Flujo')
     p.line(wavelengths_bp, bp_spectrum, line_width=2, color='blue', legend_label="BP Spectrum")
     p.line(wavelengths_rp, rp_spectrum, line_width=2, color='red', legend_label="RP Spectrum")
+
+    if request.args.get('embed') == '1':
+        return _render_spectrum_in_card(p)
 
     # Renderizar el gráfico en el template
     script, div = components(p)
@@ -479,7 +509,6 @@ def plot_continuous_spectrum(source_id):
 
 @app.route('/download_csv/<int:doc_id>')
 def download_csv(doc_id):
-    db = MongoClient('mongodb://localhost:27017/')['TFM']
     current_doc = db['F3:P2 -> Gaia Spectrum (JOIN) Gaia DR3'].find_one({"GaiaSpec_Source_id": doc_id})
     if not current_doc:
         return "Documento no encontrado", 404
@@ -500,7 +529,6 @@ def download_csv(doc_id):
 
 @app.route('/download_excel/<int:doc_id>')
 def download_excel(doc_id):
-    db = MongoClient('mongodb://localhost:27017/')['TFM']
     current_doc = db['F3:P2 -> Gaia Spectrum (JOIN) Gaia DR3'].find_one({"GaiaSpec_Source_id": doc_id})
     if not current_doc:
         return "Documento no encontrado", 404
@@ -522,7 +550,6 @@ def download_excel(doc_id):
 
 @app.route('/download_json/<int:doc_id>')
 def download_json(doc_id):
-    db = MongoClient('mongodb://localhost:27017/')['TFM']
     current_doc = db['F3:P2 -> Gaia Spectrum (JOIN) Gaia DR3'].find_one({"GaiaSpec_Source_id": doc_id})
     if not current_doc:
         return "Documento no encontrado", 404
@@ -540,65 +567,48 @@ from datetime import datetime
 
 
 
-def perform_geospatial_search(user_ra, user_dec, max_angular_distance, soloConEspectro, bp_rp_min=None, bp_rp_max=None,
-                              mag_g_min=None, mag_g_max=None, teff_min=None, teff_max=None):
-    def calculate_angular_distance(ra1, dec1, ra2, dec2):
-        ra1, dec1, ra2, dec2 = map(math.radians, [ra1, dec1, ra2, dec2])
-        sin_dec1, cos_dec1 = math.sin(dec1), math.cos(dec1)
-        sin_dec2, cos_dec2 = math.sin(dec2), math.cos(dec2)
-        delta_ra = ra2 - ra1
-        cos_delta_ra = math.cos(delta_ra)
+def _cone_bounds(ra: float, dec: float, radius: float, ra_field: str, dec_field: str) -> dict[str, Any]:
+    expanded_radius: float = radius + ANGLE_TOLERANCE
+    dec_min: float = max(-90.0, dec - expanded_radius)
+    dec_max: float = min(90.0, dec + expanded_radius)
+    query: dict[str, Any] = {dec_field: {'$gte': dec_min, '$lte': dec_max}}
 
-        # Asegurarse de que el valor esté entre -1 y 1
-        value = sin_dec1 * sin_dec2 + cos_dec1 * cos_dec2 * cos_delta_ra
-        value = max(-1, min(1, value))
+    # Un cono que alcanza un polo admite cualquier ascensión recta.
+    if dec_min == -90.0 or dec_max == 90.0:
+        query[ra_field] = {'$gte': 0.0, '$lte': 360.0}
+        return query
 
-        return math.acos(value)
-
-    def adjust_dec_range(dec, max_distance):
-        if dec - max_distance < -90:
-            dec_min = -90
-        else:
-            dec_min = dec - max_distance
-
-        if dec + max_distance > 90:
-            dec_max = 90
-        else:
-            dec_max = dec + max_distance
-
-        return dec_min, dec_max
-
-    def adjust_ra_range(ra, max_distance):
-        ra_min = ra - max_distance
-        ra_max = ra + max_distance
-
-        if ra_min < 0:
-            ra_min += 360
-        if ra_max >= 360:
-            ra_max -= 360
-
-        return ra_min, ra_max
-
-    start_time = datetime.now()
-
-    # Ajuste inicial de rangos de RA y DEC
-    dec_range_min, dec_range_max = adjust_dec_range(user_dec, max_angular_distance)
-    ra_range_min, ra_range_max = adjust_ra_range(user_ra, max_angular_distance)
-
-    # Filtro inicial por rango de RA y DEC
-    if ra_range_min > ra_range_max:
-        query = {
-            'dec_J2000': {'$gte': dec_range_min, '$lte': dec_range_max},
-            '$or': [
-                {'ra_J2000': {'$gte': ra_range_min}},
-                {'ra_J2000': {'$lte': ra_range_max}}
-            ]
-        }
+    ratio: float = math.sin(math.radians(expanded_radius)) / math.cos(math.radians(dec))
+    ra_offset: float = math.degrees(math.asin(min(1.0, ratio)))
+    ra_min: float = (ra - ra_offset) % 360.0
+    ra_max: float = (ra + ra_offset) % 360.0
+    if ra_min > ra_max:
+        query['$or'] = [{ra_field: {'$gte': ra_min}}, {ra_field: {'$lte': ra_max}}]
     else:
-        query = {
-            'ra_J2000': {'$gte': ra_range_min, '$lte': ra_range_max},
-            'dec_J2000': {'$gte': dec_range_min, '$lte': dec_range_max}
-        }
+        query[ra_field] = {'$gte': ra_min, '$lte': ra_max}
+    return query
+
+
+def _angular_distance(ra1: float, dec1: float, ra2: float, dec2: float) -> float:
+    delta_ra: float = math.radians(ra2 - ra1)
+    latitude1: float = math.radians(dec1)
+    latitude2: float = math.radians(dec2)
+    sin1: float = math.sin(latitude1)
+    cos1: float = math.cos(latitude1)
+    sin2: float = math.sin(latitude2)
+    cos2: float = math.cos(latitude2)
+    cos_delta: float = math.cos(delta_ra)
+    numerator: float = math.hypot(cos2 * math.sin(delta_ra), cos1 * sin2 - sin1 * cos2 * cos_delta)
+    denominator: float = sin1 * sin2 + cos1 * cos2 * cos_delta
+    return math.degrees(math.atan2(numerator, denominator))
+
+
+def perform_geospatial_search(user_ra: float, user_dec: float, max_angular_distance: float, soloConEspectro: bool,
+                              bp_rp_min: str | None = None, bp_rp_max: str | None = None,
+                              mag_g_min: str | None = None, mag_g_max: str | None = None,
+                              teff_min: str | None = None, teff_max: str | None = None) -> list[dict[str, Any]]:
+    start_time: datetime = datetime.now()
+    query: dict[str, Any] = _cone_bounds(user_ra, user_dec, max_angular_distance, 'ra_J2000', 'dec_J2000')
 
     # Aplicar filtros adicionales opcionales
     if soloConEspectro:
@@ -627,20 +637,19 @@ def perform_geospatial_search(user_ra, user_dec, max_angular_distance, soloConEs
 
     # Buscar en la base de datos de Gaia DR3
     results = db['Gaia DR3'].find(query)
-    results_with_distance = []
+    results_with_distance: list[dict[str, Any]] = []
 
     # Verificación de distancia esférica
     for result in results:
         ra, dec = result['ra_J2000'], result['dec_J2000']
-        distance = calculate_angular_distance(user_ra, user_dec, ra, dec)
-        distance_degrees = math.degrees(distance)
+        distance_degrees: float = _angular_distance(user_ra, user_dec, ra, dec)
 
-        if distance_degrees <= max_angular_distance:
+        if distance_degrees <= max_angular_distance + ANGLE_TOLERANCE:
             # Formateo de coordenadas a formato de cadena
             ra_str = decimal_to_equatorial(ra=ra)
             dec_str = decimal_to_equatorial(dec=dec)
             result['ra_J2000_Str'] = f"{ra_str['ra_hours']}h {ra_str['ra_minutes']}m {ra_str['ra_seconds']:.2f}s"
-            result['dec_J2000_Str'] = f"{dec_str['dec_degrees']}° {dec_str['dec_minutes']}\' {dec_str['dec_seconds']:.2f}\""
+            result['dec_J2000_Str'] = f"{dec_str['dec_degrees_text']}° {dec_str['dec_minutes']}\' {dec_str['dec_seconds']:.2f}\""
 
             # Convertir los campos numéricos a flotantes
             numeric_fields = [
@@ -692,12 +701,10 @@ def perform_geospatial_search(user_ra, user_dec, max_angular_distance, soloConEs
             elif max_prob_field == 'classprob_dsc_combmod_star':
                 symbol = 'cross'
 
-            # Añadir resultado con la distancia, URL y símbolo
+            # Añadir resultado con la distancia y el símbolo
             result_with_distance = {
                 'data': result,
                 'distance': round(distance_degrees, 2),
-                'urlSpectrumSampled': f"/GaiaDR3/plot_sampled_spectrum/{result['source_id']}",
-                'urlSpectrumContinuos': f"/GaiaDR3/plot_continuous_spectrum/{result['source_id']}",
                 'symbol': symbol,
             }
             results_with_distance.append(result_with_distance)
@@ -729,14 +736,7 @@ def get_coordinates():
                 dec_coords = decimal_to_equatorial(dec=dec)
                 log_event(request,
                           'Búsqueda de objeto por source_id ' + str(source_id) + 'AR: ' + str(ra_coords) + '- DEC: ' + str(dec_coords))
-                return jsonify({
-                    'ra_hours': ra_coords.get('ra_hours'),
-                    'ra_minutes': ra_coords.get('ra_minutes'),
-                    'ra_seconds': ra_coords.get('ra_seconds'),
-                    'dec_degrees': dec_coords.get('dec_degrees'),
-                    'dec_minutes': dec_coords.get('dec_minutes'),
-                    'dec_seconds': dec_coords.get('dec_seconds')
-                })
+                return jsonify({**ra_coords, **dec_coords})
         except ValueError:
             pass
 
@@ -766,12 +766,6 @@ def get_horizons_coordinates():
             ra = obj['RA'][0]
             dec = obj['DEC'][0]
 
-            # Ensure the declination captures the sign correctly
-            if 'DEC' in obj.colnames:
-                dec = obj['DEC'][0]
-                if obj['DEC'][0] < 0:
-                    dec = obj['DEC'][0]
-
             ra_coords = decimal_to_equatorial(ra=ra)
             dec_coords = decimal_to_equatorial(dec=dec)
 
@@ -780,14 +774,7 @@ def get_horizons_coordinates():
             log_event(request,
                       'Búsqueda Coordenadas -> NASA/JPL: ' + str(horizons_id) + ' -> Terminada con tiempo -> ' + f"{execution_time.total_seconds()}" + ' -> Correcta')
 
-            return jsonify({
-                'ra_hours': ra_coords.get('ra_hours'),
-                'ra_minutes': ra_coords.get('ra_minutes'),
-                'ra_seconds': ra_coords.get('ra_seconds'),
-                'dec_degrees': dec_coords.get('dec_degrees'),
-                'dec_minutes': dec_coords.get('dec_minutes'),
-                'dec_seconds': dec_coords.get('dec_seconds')
-            })
+            return jsonify({**ra_coords, **dec_coords})
         except Exception as e:
             log_event(request,
                       'Búsqueda NASA Horizons -> Objeto -> ' + str(horizons_id) + ' -> ' + ' -> Error: ' + str(e))
@@ -820,14 +807,7 @@ def get_simbad_coordinates():
                           'Búsqueda Coordenadas -> HD: ' + str(
                               hd_id) + ' -> Terminada con tiempo -> ' + f"{execution_time.total_seconds()}" + ' -> Correcta')
 
-                return jsonify({
-                    'ra_hours': ra_coords.get('ra_hours'),
-                    'ra_minutes': ra_coords.get('ra_minutes'),
-                    'ra_seconds': ra_coords.get('ra_seconds'),
-                    'dec_degrees': dec_coords.get('dec_degrees'),
-                    'dec_minutes': dec_coords.get('dec_minutes'),
-                    'dec_seconds': dec_coords.get('dec_seconds')
-                })
+                return jsonify({**ra_coords, **dec_coords})
             else:
                 return jsonify({'error': 'No se encontraron resultados en Simbad para el ID HD proporcionado'}), 404
         except Exception as e:
@@ -836,65 +816,83 @@ def get_simbad_coordinates():
     return jsonify({'error': 'ID HD no válido o no encontrado'}), 404
 
 
-# Función para convertir grados, minutos y segundos a grados decimales
-def get_decimal_degrees(degrees, minutes, seconds):
-    sign = 1 if degrees >= 0 else -1
-    return sign * (abs(degrees) + minutes / 60.0 + seconds / 3600.0)
+def get_decimal_degrees(degrees: float, minutes: float, seconds: float) -> float:
+    return math.copysign(abs(degrees) + minutes / 60.0 + seconds / 3600.0, degrees)
+
+
+def _search_center(ra: float, dec: float) -> tuple[float, float]:
+    if not (0 <= ra <= 360 and -90 <= dec <= 90):
+        raise ValueError('La ascensión recta debe estar entre 0° y 360° y la declinación entre −90° y 90°.')
+    return ra % 360.0, dec
+
+
+def _search_radius(value: str, minimum: float, maximum: float) -> float:
+    try:
+        radius: float = float(value) if value else DEFAULT_SEARCH_RADIUS
+    except ValueError as error:
+        raise ValueError('Introduce un radio numérico en grados.') from error
+    if not minimum <= radius <= maximum:
+        raise ValueError(f'El radio debe estar entre {minimum:g}° y {maximum:g}°.')
+    return radius
+
+
+def _web_search_parameters(form: Mapping[str, str]) -> tuple[float, float, float]:
+    values: tuple[str, ...] = tuple(form.get(field, '').strip() for field in COORDINATE_FIELDS)
+    if not all(values):
+        raise ValueError('Completa todos los campos de las coordenadas.')
+    try:
+        ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds = map(float, values)
+    except ValueError as error:
+        raise ValueError('Introduce coordenadas numéricas.') from error
+    ra, dec = _search_center(
+        (ra_hours + ra_minutes / 60.0 + ra_seconds / 3600.0) * 15.0,
+        get_decimal_degrees(dec_degrees, dec_minutes, dec_seconds),
+    )
+    radius: float = _search_radius(form.get('search_degrees', '').strip(), MIN_WEB_RADIUS, MAX_WEB_RADIUS)
+    return ra, dec, radius
 
 
 @app.route('/GaiaDR3', methods=['GET', 'POST'])
 def search():
-    if request.method == 'POST':
-        ra_hours = request.form.get('ra_hours', '').strip()
-        ra_minutes = request.form.get('ra_minutes', '').strip()
-        ra_seconds = request.form.get('ra_seconds', '').strip()
-        dec_degrees = request.form.get('dec_degrees', '').strip()
-        dec_minutes = request.form.get('dec_minutes', '').strip()
-        dec_seconds = request.form.get('dec_seconds', '').strip()
-        search_grados = request.form.get('search_degrees', '0.01').strip()
-        bp_rp_min = request.form.get('bp_rp_min', '').strip()
-        bp_rp_max = request.form.get('bp_rp_max', '').strip()
-        mag_g_min = request.form.get('mag_g_min', '').strip()
-        mag_g_max = request.form.get('mag_g_max', '').strip()
-        teff_min = request.form.get('teff_min', '').strip()
-        teff_max = request.form.get('teff_max', '').strip()
+    if request.method != 'POST':
+        log_event(request, "Iniciando -> web")
+        return render_template('GaiaDR3.html', num_results=0, execution_time=0, target_ra_dec='',
+                               search_grados=DEFAULT_SEARCH_RADIUS)
 
-        results, num_results, execution_time = [], 0, 0
+    form_values: dict[str, str] = {
+        field: request.form.get(field, '').strip() for field in ('source_id', *COORDINATE_FIELDS, *FILTER_FIELDS)
+    }
+    try:
+        ra, dec, radius = _web_search_parameters(request.form)
+    except ValueError as error:
+        return render_template('GaiaDR3.html', **form_values, num_results=0, execution_time=0, target_ra_dec='',
+                               search_grados=request.form.get('search_degrees') or DEFAULT_SEARCH_RADIUS,
+                               search_error=str(error)), 400
 
-        if ra_hours and ra_minutes and ra_seconds and dec_degrees and dec_minutes and dec_seconds:
-            ra_J2000 = (float(ra_hours) + (float(ra_minutes) / 60.0) + (float(ra_seconds) / 3600.0)) * 15.0
-            dec_J2000 = get_decimal_degrees(float(dec_degrees), float(dec_minutes), float(dec_seconds))
-            target_ra_dec = f"{ra_J2000} {dec_J2000}"
-            search_grados = min(float(search_grados), 0.5)
-            soloConEspectro = 'showSpectra' in request.form
+    start_time: datetime = datetime.now()
+    results: list[dict[str, Any]] = perform_geospatial_search(
+        ra, dec, radius, 'showSpectra' in request.form,
+        *(form_values[field] or None for field in FILTER_FIELDS),
+    )
+    continuous_candidates: list[int] = [
+        result['data']['source_id'] for result in results if result['data'].get('has_xp_continuous', True)
+    ]
+    continuous_sources: set[int] = set()
+    if continuous_candidates:
+        continuous_sources = set(db[CONTINUOUS_SPECTRA].distinct('source_id', {'source_id': {'$in': continuous_candidates}}))
 
-            start_time = datetime.now()
-            results = perform_geospatial_search(ra_J2000, dec_J2000, search_grados, soloConEspectro,
-                                                bp_rp_min or None, bp_rp_max or None, mag_g_min or None, mag_g_max or None,
-                                                teff_min or None, teff_max or None)
+    for result in results:
+        data: dict[str, Any] = result['data']
+        source_id: int = data['source_id']
+        if data.get('has_xp_sampled'):
+            result['sampled_spectrum_url'] = url_for('plot_sampled_spectrum', doc_id=source_id)
+        if source_id in continuous_sources:
+            result['continuous_spectrum_url'] = url_for('plot_continuous_spectrum', source_id=source_id)
+        result['data'] = round_result_fields(data)
 
-            for result in results:
-                result['data'] = round_result_fields(result['data'])
-
-            num_results = len(results)
-            end_time = datetime.now()
-            execution_time = end_time - start_time
-        else:
-            target_ra_dec = ""
-            results = []
-            num_results = 0
-            execution_time = 0
-
-        return render_template('GaiaDR3.html', results=results,
-                               ra_hours=ra_hours, ra_minutes=ra_minutes, ra_seconds=ra_seconds,
-                               dec_degrees=dec_degrees, dec_minutes=dec_minutes, dec_seconds=dec_seconds,
-                               search_grados=search_grados, bp_rp_min=bp_rp_min, bp_rp_max=bp_rp_max,
-                               mag_g_min=mag_g_min, mag_g_max=mag_g_max,
-                               teff_min=teff_min, teff_max=teff_max,
-                               num_results=num_results, execution_time=execution_time, target_ra_dec=target_ra_dec)
-
-    log_event(request, "Iniciando -> web")
-    return render_template('GaiaDR3.html', num_results=0, execution_time=0, target_ra_dec='')
+    return render_template('GaiaDR3.html', **form_values, results=results,
+                           num_results=len(results), execution_time=datetime.now() - start_time,
+                           target_ra_dec=f"{ra} {dec}", search_grados=radius)
 
 
 import time as time_module
@@ -902,38 +900,18 @@ import time as time_module
 @app.route('/api/GaiaDR3/search_debug', methods=['POST'])
 def search_debug():
     try:
-        ra_hours = request.form.get('ra_hours')
-        ra_minutes = request.form.get('ra_minutes')
-        ra_seconds = request.form.get('ra_seconds')
-        dec_degrees = request.form.get('dec_degrees')
-        dec_minutes = request.form.get('dec_minutes')
-        dec_seconds = request.form.get('dec_seconds')
-        search_grados = request.form.get('search_degrees', '0.01')
+        ra, dec, radius = _web_search_parameters(request.form)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
 
-        if not all([ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds]):
-            return jsonify({"error": "Parámetros incompletos"}), 400
-
-        try:
-            ra_hours = float(ra_hours)
-            ra_minutes = float(ra_minutes)
-            ra_seconds = float(ra_seconds)
-            dec_degrees = float(dec_degrees)
-            dec_minutes = float(dec_minutes)
-            dec_seconds = float(dec_seconds)
-            search_grados = min(float(search_grados), 0.5)
-        except ValueError:
-            return jsonify({"error": "Parámetros inválidos"}), 400
-
-        ra_J2000 = (ra_hours + ra_minutes/60 + ra_seconds/3600) * 15.0
-        dec_J2000 = get_decimal_degrees(dec_degrees, dec_minutes, dec_seconds)
-
+    try:
         soloConEspectro = 'showSpectra' in request.form
 
         # 🔥 MEDICIÓN CORRECTA
         start_time = time_module.perf_counter()
 
         results = perform_geospatial_search(
-            ra_J2000, dec_J2000, search_grados, soloConEspectro,
+            ra, dec, radius, soloConEspectro,
             request.form.get('bp_rp_min') or None,
             request.form.get('bp_rp_max') or None,
             request.form.get('mag_g_min') or None,
@@ -947,7 +925,7 @@ def search_debug():
         return jsonify({
             "execution_time": round(execution_time, 4),
             "record_count": len(results),
-            "search_degrees": search_grados
+            "search_degrees": radius
         })
 
     except Exception as e:
@@ -996,22 +974,23 @@ def dataset():
 @app.route("/api/GaiaDR3/cone-search", methods=["GET"])
 def cone_search():
     try:
-        ra = float(request.args.get("ra"))
-        dec = float(request.args.get("dec"))
-        radius = float(request.args.get("radius", 0.1))
+        ra, dec = _search_center(float(request.args.get("ra", "")), float(request.args.get("dec", "")))
+    except ValueError:
+        return jsonify({"error": "Introduce una ascensión recta y una declinación válidas en grados."}), 400
 
-        query = {
-            "ra": {"$gte": ra - radius, "$lte": ra + radius},
-            "dec": {"$gte": dec - radius, "$lte": dec + radius}
-        }
+    try:
+        radius: float = _search_radius(request.args.get("radius", "").strip(), 0.0, 180.0)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
 
-        docs = db["Gaia DR3"].find(
-            query,
-            {"_id": 0}
-        ).limit(1000)
-
-        return jsonify(list(docs))
-
+    try:
+        query: dict[str, Any] = _cone_bounds(ra, dec, radius, 'ra', 'dec')
+        with db["Gaia DR3"].find(query, {"_id": 0}) as candidates:
+            matches = (
+                doc for doc in candidates
+                if _angular_distance(ra, dec, doc['ra'], doc['dec']) <= radius + ANGLE_TOLERANCE
+            )
+            return jsonify(list(islice(matches, 1000)))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1019,5 +998,4 @@ def cone_search():
 
 
 if __name__ == '__main__':
-   app.run(host='localhost', debug=False)
-   #serve(app, host='192.168.200.80', port=5000, threads=12)
+    app.run(host=http_host, port=http_port, debug=False, load_dotenv=False)

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Espectro de la fuente · GaiaFinder</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gaiafinder.css') }}">
+    {{ resources | safe }}
+</head>
+<body class="embedded-spectrum">
+<main aria-label="Gráfica del espectro">
+    <div class="spectrum-plot">{{ div | safe }}</div>
+    {% if sampled_id is not none %}
+        <div class="spectrum-downloads" aria-label="Descargas">
+            <span>Descargar</span>
+            <a href="{{ url_for('download_csv', doc_id=sampled_id) }}" download>CSV</a>
+            <a href="{{ url_for('download_excel', doc_id=sampled_id) }}" download>Excel</a>
+            <a href="{{ url_for('download_json', doc_id=sampled_id) }}" download="spectrum_{{ sampled_id }}.json">JSON</a>
+        </div>
+    {% endif %}
+</main>
+{{ script | safe }}
+</body>
+</html>

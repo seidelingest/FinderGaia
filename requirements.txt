@@ -1,0 +1,10 @@
+astropy
+astroquery
+bokeh
+Flask
+numpy
+openpyxl
+pandas
+pymongo
+python-dotenv
+scipy
